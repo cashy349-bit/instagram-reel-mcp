@@ -3,21 +3,22 @@ Instagram Reel MCP Server
 --------------------------
 Read-only tools for a public Instagram Reel URL:
 
-  fetch_instagram_reel   -> video file + metadata only (fast)
-  analyze_instagram_reel -> video + metadata + sampled frames + speech
-                             transcript (slower, fuller picture)
+  fetch_instagram_reel   -> video file + metadata only (fast, cached)
+  fetch_reel_transcript  -> + speech transcript, no frames (no vision cost)
+  analyze_instagram_reel -> + sampled frames, a contact sheet, transcript
 
-No comment / like / share / follow / post capability exists anywhere
-in this file — that boundary is enforced by omission, not a toggle.
+No comment / like / share / follow / post capability exists anywhere in
+this file — that boundary is enforced by omission, not a toggle.
 
-Analysis happens fresh on every call. Nothing here trains, fine-tunes,
-or updates any model's weights, and nothing persists between calls
-except the downloaded files on disk.
+Analysis happens fresh on every call unless served from local cache.
+Nothing here trains, fine-tunes, or updates any model's weights.
 
 Requires on PATH: yt-dlp, ffmpeg
-Requires via pip: mcp, faster-whisper (see requirements.txt)
+Requires via pip: mcp, faster-whisper, Pillow (see requirements.txt)
 """
 import json
+import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -30,42 +31,65 @@ mcp = FastMCP("instagram-reel")
 DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "ig_reel_mcp"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-# Optional: path to a cookies.txt file (Netscape format) exported from a
-# logged-in browser session. Instagram often requires this for reliable
-# access, even to public posts. Leave as None to attempt cookie-less access.
-COOKIES_FILE: Optional[str] = None  # e.g. "/home/you/ig_cookies.txt"
+# Set via env var so this is deployable without editing source:
+#   export IG_REEL_COOKIES=/path/to/cookies.txt
+# Instagram often requires a logged-in session even for public posts.
+COOKIES_FILE: Optional[str] = os.environ.get("IG_REEL_COOKIES") or None
 
-# Loaded lazily on first transcription call, then cached for the process
-# lifetime. "base" balances speed and accuracy on CPU; switch to "small"
-# or "medium" for better accuracy at the cost of speed.
 _WHISPER_MODEL_SIZE = "base"
 _whisper_model = None
 
 
+def _reel_id_from_url(url: str) -> Optional[str]:
+    m = re.search(r"/(reel|p|tv)/([A-Za-z0-9_-]+)", url)
+    return m.group(2) if m else None
+
+
 @mcp.tool()
-def fetch_instagram_reel(url: str) -> dict:
+def fetch_instagram_reel(url: str, force_refresh: bool = False) -> dict:
     """
     Fetch a public Instagram Reel: downloads the video and extracts metadata.
     Read-only — does not comment, like, share, follow, or post anything.
+    Served from local cache on repeat calls for the same reel unless
+    force_refresh=True.
 
     Args:
         url: Full Instagram Reel URL, e.g. https://www.instagram.com/reel/XXXXXXXXX/
+        force_refresh: bypass the cache and re-download.
 
     Returns:
         dict with video_path, thumbnail_path, caption, uploader, duration,
-        view_count, like_count, comment_count, upload_date — or an "error" key.
+        view_count, like_count, comment_count, upload_date, cached —
+        or an "error" key.
     """
     if "instagram.com" not in url:
         return {"error": "URL does not look like an Instagram link."}
 
+    reel_id = _reel_id_from_url(url)
+    if not force_refresh and reel_id:
+        cached_info = DOWNLOAD_DIR / f"{reel_id}.info.json"
+        cached_video = DOWNLOAD_DIR / f"{reel_id}.mp4"
+        if cached_info.exists() and cached_video.exists():
+            info = json.loads(cached_info.read_text())
+            thumb = next(DOWNLOAD_DIR.glob(f"{reel_id}*.jpg"), None)
+            return {
+                "video_path": str(cached_video),
+                "thumbnail_path": str(thumb) if thumb else None,
+                "caption": info.get("description"),
+                "uploader": info.get("uploader") or info.get("uploader_id"),
+                "duration_seconds": info.get("duration"),
+                "view_count": info.get("view_count"),
+                "like_count": info.get("like_count"),
+                "comment_count": info.get("comment_count"),
+                "upload_date": info.get("upload_date"),
+                "cached": True,
+            }
+
     out_template = str(DOWNLOAD_DIR / "%(id)s.%(ext)s")
     cmd = [
-        "yt-dlp",
-        "--no-playlist",
-        "--write-info-json",
-        "--write-thumbnail",
-        "-o", out_template,
-        url,
+        "yt-dlp", "--no-playlist",
+        "--write-info-json", "--write-thumbnail",
+        "-o", out_template, url,
     ]
     if COOKIES_FILE:
         cmd[1:1] = ["--cookies", COOKIES_FILE]
@@ -76,8 +100,8 @@ def fetch_instagram_reel(url: str) -> dict:
         return {
             "error": (
                 "Download failed. Instagram may require a logged-in session "
-                "(set COOKIES_FILE at the top of server.py) or the post may "
-                "be private, age-gated, or removed."
+                "(set IG_REEL_COOKIES) or the post may be private, age-gated, "
+                "or removed."
             ),
             "details": (e.stderr or str(e))[-800:],
         }
@@ -107,6 +131,7 @@ def fetch_instagram_reel(url: str) -> dict:
         "like_count": info.get("like_count"),
         "comment_count": info.get("comment_count"),
         "upload_date": info.get("upload_date"),
+        "cached": False,
     }
 
 
@@ -131,6 +156,35 @@ def _extract_frames(video_path: Path, interval_seconds: float, max_frames: int) 
     ]
 
 
+def _build_contact_sheet(frames: list, out_dir: Path, cols: int = 5) -> Optional[str]:
+    """Combine sampled frames into one grid image so an agent can inspect
+    the whole reel in a single vision call instead of one per frame."""
+    if not frames:
+        return None
+    from PIL import Image, ImageDraw, ImageFont
+
+    cell_w, cell_h = 220, 220
+    n = len(frames)
+    cols = min(cols, n)
+    rows = (n + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * cell_w, rows * cell_h), (14, 14, 16))
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+
+    for i, f in enumerate(frames):
+        img = Image.open(f["frame_path"]).convert("RGB")
+        img.thumbnail((cell_w - 8, cell_h - 26))
+        x, y = (i % cols) * cell_w, (i // cols) * cell_h
+        sheet.paste(img, (x + (cell_w - img.width) // 2, y + 4))
+        label = f"{f['timestamp_seconds']}s"
+        draw.rectangle([x, y + cell_h - 18, x + cell_w, y + cell_h], fill=(0, 0, 0))
+        draw.text((x + 4, y + cell_h - 15), label, fill=(255, 255, 255), font=font)
+
+    out_path = out_dir / "contact_sheet.jpg"
+    sheet.save(out_path, quality=85)
+    return str(out_path)
+
+
 def _get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
@@ -139,10 +193,54 @@ def _get_whisper_model():
     return _whisper_model
 
 
-def _transcribe(video_path: Path) -> str:
+def _transcribe_cached(video_path: Path) -> str:
+    """Transcribe once per video, cache to disk so repeat calls (from
+    fetch_reel_transcript or analyze_instagram_reel) skip Whisper entirely."""
+    cache_path = video_path.with_suffix(".transcript.txt")
+    if cache_path.exists():
+        return cache_path.read_text()
     model = _get_whisper_model()
     segments, _ = model.transcribe(str(video_path))
-    return " ".join(seg.text.strip() for seg in segments).strip()
+    text = " ".join(seg.text.strip() for seg in segments).strip()
+    cache_path.write_text(text)
+    return text
+
+
+@mcp.tool()
+def fetch_reel_transcript(url: str) -> dict:
+    """
+    Lightweight: downloads (or reuses cache) and returns only the speech
+    transcript plus text metadata — no frame extraction, no images, no
+    vision tokens spent. Use this when the question is about what was
+    SAID, not what is SHOWN.
+
+    Returns:
+        dict with transcript, caption, uploader, duration_seconds,
+        view_count, like_count, comment_count, upload_date —
+        or an "error" key.
+    """
+    base = fetch_instagram_reel(url)
+    if "error" in base:
+        return base
+    video_path = Path(base["video_path"]) if base.get("video_path") else None
+    if not video_path or not video_path.exists():
+        return {"error": "Video file missing after download; cannot transcribe."}
+
+    try:
+        transcript = _transcribe_cached(video_path)
+    except Exception as e:
+        return {"error": "Transcription failed.", "details": str(e)[-500:]}
+
+    return {
+        "transcript": transcript,
+        "caption": base.get("caption"),
+        "uploader": base.get("uploader"),
+        "duration_seconds": base.get("duration_seconds"),
+        "view_count": base.get("view_count"),
+        "like_count": base.get("like_count"),
+        "comment_count": base.get("comment_count"),
+        "upload_date": base.get("upload_date"),
+    }
 
 
 @mcp.tool()
@@ -152,23 +250,20 @@ def analyze_instagram_reel(
     max_frames: int = 30,
 ) -> dict:
     """
-    Full analysis of a public Instagram Reel: downloads the video, samples
-    frames across its full length for visual inspection, transcribes the
-    spoken audio, and returns metadata — so the calling AI sees what is
-    actually shown and said in the reel, not just the caption.
+    Full analysis: downloads the video, samples frames, builds one combined
+    contact-sheet image from them, and transcribes the audio — so the
+    calling AI sees what is shown and said, not just the caption.
 
-    This is request-time analysis only. It does not train or fine-tune
-    any model, and nothing persists across calls except downloaded files.
+    To minimize vision-token cost, read `contact_sheet_path` (one image)
+    before opening individual entries in `frames` (up to max_frames images).
 
-    Args:
-        url: Full Instagram Reel URL.
-        frame_interval_seconds: seconds between sampled frames (default 1.5).
-        max_frames: cap on frames returned, to bound cost (default 30).
+    Request-time analysis only — no training, no persisted learning beyond
+    the on-disk cache.
 
     Returns:
-        dict with video_path, frames (list of {timestamp_seconds, frame_path}),
-        transcript, caption, uploader, duration_seconds, view_count,
-        like_count, comment_count, upload_date — or an "error" key.
+        dict with video_path, frames, contact_sheet_path, transcript,
+        caption, uploader, duration_seconds, view_count, like_count,
+        comment_count, upload_date — or an "error" key.
     """
     base = fetch_instagram_reel(url)
     if "error" in base:
@@ -179,16 +274,20 @@ def analyze_instagram_reel(
         return {"error": "Video file missing after download; cannot analyze."}
 
     try:
-        base["frames"] = _extract_frames(video_path, frame_interval_seconds, max_frames)
+        frames = _extract_frames(video_path, frame_interval_seconds, max_frames)
+        base["frames"] = frames
+        base["contact_sheet_path"] = _build_contact_sheet(frames, video_path.parent)
     except subprocess.CalledProcessError as e:
         base["frames"] = []
+        base["contact_sheet_path"] = None
         base["frame_extraction_error"] = (e.stderr or str(e))[-500:]
     except FileNotFoundError:
         base["frames"] = []
+        base["contact_sheet_path"] = None
         base["frame_extraction_error"] = "ffmpeg is not installed or not on PATH."
 
     try:
-        base["transcript"] = _transcribe(video_path)
+        base["transcript"] = _transcribe_cached(video_path)
     except Exception as e:
         base["transcript"] = ""
         base["transcription_error"] = str(e)[-500:]
