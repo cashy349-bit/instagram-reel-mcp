@@ -1,0 +1,60 @@
+<svg viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A0D12"/>
+      <stop offset="100%" stop-color="#12161D"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F2B84B" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#F2B84B" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#F2B84B" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="400" fill="url(#bg)"/>
+
+  <!-- left text block -->
+  <text x="64" y="150" font-family="Arial, Helvetica, sans-serif" font-weight="700"
+        font-size="52" fill="#ECEFF2" letter-spacing="-0.5">Instagram Reel MCP</text>
+
+  <text x="64" y="196" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#818C9C">
+    give your AI agent eyes on any public reel —
+  </text>
+  <text x="64" y="226" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#818C9C">
+    frames, transcript, metadata. read-only.
+  </text>
+
+  <!-- install line -->
+  <rect x="64" y="272" width="430" height="42" rx="6" fill="#161B24" stroke="#2A3240"/>
+  <text x="82" y="299" font-family="Consolas, 'SF Mono', monospace" font-size="16" fill="#F2B84B">$</text>
+  <text x="100" y="299" font-family="Consolas, 'SF Mono', monospace" font-size="16" fill="#C9CFD9">pip install -r requirements.txt</text>
+
+  <!-- frame-sampling strip: literal product mechanic, not decoration -->
+  <!-- baseline / timeline -->
+  <line x1="700" y1="300" x2="1140" y2="300" stroke="#2A3240" stroke-width="1.5"/>
+
+  <!-- sampled frames at varying heights/opacity -->
+  <g>
+    <rect x="700" y="210" width="34" height="58" rx="5" fill="#1E2530" stroke="#323C4A"/>
+    <rect x="746" y="190" width="34" height="78" rx="5" fill="#1E2530" stroke="#323C4A"/>
+    <rect x="792" y="225" width="34" height="43" rx="5" fill="#1E2530" stroke="#323C4A" opacity="0.8"/>
+
+    <!-- highlighted frame: the one currently being "analyzed" -->
+    <rect x="838" y="150" width="46" height="118" rx="6" fill="#1E2530" stroke="#F2B84B" stroke-width="2"/>
+    <rect x="838" y="150" width="46" height="118" rx="6" fill="url(#beam)"/>
+    <line x1="861" y1="150" x2="861" y2="268" stroke="#F2B84B" stroke-width="1" opacity="0.5"/>
+
+    <rect x="898" y="200" width="34" height="68" rx="5" fill="#1E2530" stroke="#323C4A"/>
+    <rect x="944" y="222" width="34" height="46" rx="5" fill="#1E2530" stroke="#323C4A" opacity="0.75"/>
+    <rect x="990" y="195" width="34" height="73" rx="5" fill="#1E2530" stroke="#323C4A"/>
+    <rect x="1036" y="232" width="34" height="36" rx="5" fill="#1E2530" stroke="#323C4A" opacity="0.65"/>
+    <rect x="1082" y="208" width="34" height="60" rx="5" fill="#1E2530" stroke="#323C4A" opacity="0.8"/>
+  </g>
+
+  <!-- timestamp ticks under the highlighted + neighboring frames -->
+  <text x="700" y="320" font-family="Consolas, 'SF Mono', monospace" font-size="12" fill="#5B6472">0.0s</text>
+  <text x="850" y="320" font-family="Consolas, 'SF Mono', monospace" font-size="12" fill="#F2B84B">1.5s</text>
+  <text x="1095" y="320" font-family="Consolas, 'SF Mono', monospace" font-size="12" fill="#5B6472">4.5s</text>
+
+  <text x="700" y="350" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#5B6472">sampled frames + speech transcript, per reel</text>
+</svg>

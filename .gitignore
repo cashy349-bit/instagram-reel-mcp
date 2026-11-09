@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+ig_cookies.txt
+*.mp4
+*.jpg
+!assets/*.svg
