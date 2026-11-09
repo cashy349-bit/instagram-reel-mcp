@@ -1,0 +1,114 @@
+INSTAGRAM REEL MCP - USAGE FROM GITHUB
+=========================================
+
+This covers: cloning the repo from GitHub, installing it, and wiring
+it into an AI coding agent (Claude Code, Codex CLI, Cursor, Grok,
+DeepSeek-based tools, or any other MCP-capable client).
+
+This is a Python script, not an npm package - every agent below needs
+the repo cloned locally first. There is no "run straight from a
+GitHub URL" shortcut (that trick only works for npm-published MCP
+servers via npx).
+
+
+1. CLONE THE REPO
+------------------
+git clone https://github.com/YOUR_USERNAME/instagram-reel-mcp.git
+cd instagram-reel-mcp
+pwd
+  (note this absolute path - every config below needs it)
+
+
+2. INSTALL DEPENDENCIES
+------------------------
+pip install -r requirements.txt
+
+Also required on PATH, not installed via pip:
+  ffmpeg   - apt install ffmpeg   OR   brew install ffmpeg
+  yt-dlp   - installed via pip above; confirm it resolved to PATH
+
+First call to analyze_instagram_reel or fetch_reel_transcript
+downloads a ~150MB Whisper speech model one time.
+
+
+3. WIRE IT INTO YOUR AI AGENT
+-------------------------------
+Replace /absolute/path/to/instagram-reel-mcp with your path from
+step 1 in every snippet below.
+
+CLAUDE CODE
+  claude mcp add instagram-reel -- python /absolute/path/to/instagram-reel-mcp/server.py
+
+  or edit ~/.claude.json (all projects) / .mcp.json (this repo only):
+  {
+    "mcpServers": {
+      "instagram-reel": {
+        "command": "python",
+        "args": ["/absolute/path/to/instagram-reel-mcp/server.py"]
+      }
+    }
+  }
+
+CODEX CLI (OpenAI)
+  codex mcp add instagram-reel -- python /absolute/path/to/instagram-reel-mcp/server.py
+  Config lives at ~/.codex/config.toml, shared with the IDE extension
+  and desktop app. Restart Codex after adding; check with /mcp or
+  "codex mcp list".
+
+CURSOR
+  Edit .cursor/mcp.json (project) or ~/.cursor/mcp.json (global) -
+  same JSON shape as Claude Code above. Restart Cursor fully.
+
+GROK (xAI) - two different paths, pick the right one
+  Use "Grok Build", xAI's terminal coding CLI - it has native MCP
+  support and runs stdio servers directly. Same config as Claude
+  Code above works with zero changes.
+
+  NOTE: the raw xAI API "Remote MCP Tools" and the grok.com
+  Connectors UI only accept Streamable HTTP or SSE servers, NOT
+  stdio. This server will NOT work through those two paths without
+  an HTTP bridge in front of it. Use Grok Build instead.
+
+DEEPSEEK
+  DeepSeek has no official first-party CLI with MCP support.
+  Community terminal agents built on the DeepSeek API do support
+  MCP the same way - e.g. Whale (usewhale/DeepSeek-Code-Whale).
+  Install it, then add this server using the same command/args
+  shape as above. Check that tool's own docs/mcp.md for its exact
+  config file path, since community tools move these more often
+  than first-party ones.
+
+ANY OTHER MCP-CAPABLE CLIENT
+  If it exposes an "mcpServers" JSON config or an "add MCP server"
+  command, point it at:
+  {
+    "command": "python",
+    "args": ["/absolute/path/to/instagram-reel-mcp/server.py"]
+  }
+
+
+4. IF INSTAGRAM ASKS FOR A LOGIN SESSION
+-------------------------------------------
+Export cookies.txt from a logged-in browser (e.g. the "Get
+cookies.txt LOCALLY" extension), then set the IG_REEL_COOKIES env
+var in your AI agent's MCP server config - do not edit server.py:
+  "env": { "IG_REEL_COOKIES": "/path/to/cookies.txt" }
+
+
+5. WHAT YOU GET - THREE TOOLS
+--------------------------------
+fetch_instagram_reel(url)     -> metadata only. cheapest. cached.
+fetch_reel_transcript(url)    -> + speech transcript. no images.
+analyze_instagram_reel(url)   -> + frames + one contact-sheet image
+                                  + transcript. use only when the
+                                  agent needs to SEE the reel.
+
+Full field-by-field reference ........ README.md
+Per-agent nuances + credit tips ...... HELP.md
+Idea-saturation filter for content ... SKILL.md
+
+
+6. READ-ONLY, ALWAYS
+-----------------------
+No comment, like, share, follow, or post tool exists in this
+codebase. Nothing to toggle off - it was never built.
