@@ -28,6 +28,11 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("instagram-reel")
 
+# scrapesmith/instagram-hashtag-scraper, verified via apify.com Nov 2026.
+# Community-maintained third-party Actor, not Instagram or Apify official.
+APIFY_HASHTAG_ACTOR_ID = "7YASHOuDdgJuPjqsP"
+APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN")
+
 DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "ig_reel_mcp"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -293,6 +298,95 @@ def analyze_instagram_reel(
         base["transcription_error"] = str(e)[-500:]
 
     return base
+
+
+@mcp.tool()
+def discover_trending_by_hashtag(hashtag: str, limit: int = 5, include_transcripts: bool = False) -> dict:
+    """
+    Find top public reels for a hashtag. There is no real Instagram
+    "genre" taxonomy, so map a genre/niche to the closest hashtag
+    yourself (e.g. "comedy" -> "comedyreels", "fitness" -> "gymtok").
+
+    EXPERIMENTAL - different mechanism than the other tools. yt-dlp has
+    no Instagram hashtag/discovery extractor, so this calls a
+    third-party paid Apify Actor (scrapesmith/instagram-hashtag-scraper)
+    over HTTPS instead. Requires your own Apify account and an
+    APIFY_API_TOKEN env var (free tier: $5/month credit; 5 results costs
+    a fraction of a cent). Field names here are based on the actor's
+    published docs as of Nov 2026 and have NOT been verified end-to-end
+    from this build environment (no network path to apify.com here) -
+    it is community-maintained and its output shape can change without
+    notice. Run it once and check the output before relying on it.
+
+    Args:
+        hashtag: hashtag to search, with or without '#'.
+        limit: how many top reels to return. The actor does not
+            guarantee results pre-sorted by engagement, so this
+            over-fetches and ranks by likes_count locally.
+        include_transcripts: if True, also downloads and transcribes
+            each returned reel in this same call - real added time and
+            cost (up to `limit` full downloads + Whisper runs). Default
+            False: return URLs/captions/counts only, and let the caller
+            decide which ones are worth the deeper fetch via
+            fetch_reel_transcript or analyze_instagram_reel.
+
+    Returns:
+        dict with hashtag, reels (list of url, caption, likes_count,
+        comments_count, owner_username, type, and transcript if
+        requested) - or an "error" key.
+    """
+    if not APIFY_API_TOKEN:
+        return {
+            "error": (
+                "APIFY_API_TOKEN is not set. Create a free Apify account, "
+                "get an API token from the Apify Console, and set it as an "
+                "env var in your MCP client's server config."
+            )
+        }
+
+    tag = hashtag.lstrip("#").strip()
+    if not tag:
+        return {"error": "Empty hashtag."}
+
+    fetch_count = max(limit * 4, 20)  # over-fetch so local ranking has something to rank
+    try:
+        import requests
+        resp = requests.post(
+            f"https://api.apify.com/v2/acts/{APIFY_HASHTAG_ACTOR_ID}/run-sync-get-dataset-items",
+            params={"token": APIFY_API_TOKEN},
+            json={"hashtags": [tag], "maxResultsPerHashtag": fetch_count},
+            timeout=90,
+        )
+        resp.raise_for_status()
+        items = resp.json()
+    except Exception as e:
+        return {"error": "Apify request failed.", "details": str(e)[-500:]}
+
+    videos = [it for it in items if it.get("type") == "video" or it.get("productType") == "reel"]
+    videos.sort(key=lambda it: it.get("likesCount", 0), reverse=True)
+    top = videos[:limit]
+
+    if not top:
+        return {"hashtag": tag, "reels": [], "note": "No video/reel results found for this hashtag."}
+
+    results = []
+    for it in top:
+        entry = {
+            "url": it.get("url"),
+            "caption": it.get("caption"),
+            "likes_count": it.get("likesCount"),
+            "comments_count": it.get("commentsCount"),
+            "owner_username": it.get("ownerUsername"),
+            "type": it.get("type"),
+        }
+        if include_transcripts and entry["url"]:
+            t = fetch_reel_transcript(entry["url"])
+            entry["transcript"] = t.get("transcript", "")
+            if "error" in t:
+                entry["transcript_error"] = t["error"]
+        results.append(entry)
+
+    return {"hashtag": tag, "reels": results}
 
 
 if __name__ == "__main__":

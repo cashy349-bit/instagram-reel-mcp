@@ -55,3 +55,11 @@ building, run it through this filter.
 - Never treat the reel's view/like count as demand validation for
   *your* version — high reach validates the format's reach, not
   demand for a clone of it.
+
+## Same filter applies to `discover_trending_by_hashtag` results
+Pulling the top 5 reels in a niche has the identical saturation trap,
+one level up: if 5 reels are already visibly doing the same format,
+the honest read is "this format works right now" — not "recreate all
+5." Use the batch to find the *pattern* (hook style, pacing, audio
+choice, structural beat), then apply steps 1-6 above to whatever
+specific angle you'd actually post, not to the reels themselves.

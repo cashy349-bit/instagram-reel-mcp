@@ -61,6 +61,24 @@ to inspect) and a local Whisper transcript of the spoken audio.
 Analysis is request-time only — nothing here trains or fine-tunes a
 model, and nothing persists across calls except the downloaded files.
 
+### `discover_trending_by_hashtag(hashtag, limit=5, include_transcripts=False)`
+**Experimental, different mechanism than the tools above.** Instagram
+has no "genre" API and yt-dlp has no hashtag/discovery extractor, so
+this calls a third-party paid Apify Actor instead. Requires your own
+`APIFY_API_TOKEN` (free tier covers this easily — 5 results costs a
+fraction of a cent). Not verified end-to-end from this build
+environment; the Actor is community-maintained and can change its
+output shape without notice. See `HELP.md` for setup and caveats.
+
+```json
+{
+  "hashtag": "fitness",
+  "reels": [
+    {"url": "...", "caption": "...", "likes_count": 41200, "comments_count": 612, "owner_username": "...", "type": "video"}
+  ]
+}
+```
+
 ## Setup
 
 ```bash

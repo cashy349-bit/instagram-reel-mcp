@@ -95,17 +95,28 @@ var in your AI agent's MCP server config - do not edit server.py:
   "env": { "IG_REEL_COOKIES": "/path/to/cookies.txt" }
 
 
-5. WHAT YOU GET - THREE TOOLS
+5. WHAT YOU GET - FOUR TOOLS
 --------------------------------
 fetch_instagram_reel(url)     -> metadata only. cheapest. cached.
 fetch_reel_transcript(url)    -> + speech transcript. no images.
 analyze_instagram_reel(url)   -> + frames + one contact-sheet image
                                   + transcript. use only when the
                                   agent needs to SEE the reel.
+discover_trending_by_hashtag(hashtag, limit=5)
+                               -> EXPERIMENTAL. top reels for a
+                                  hashtag ("genre" = closest hashtag
+                                  you pick - Instagram has no genre
+                                  API). Needs its own APIFY_API_TOKEN
+                                  env var (separate free account at
+                                  apify.com). Not yt-dlp based. See
+                                  HELP.md before relying on this one.
 
 Full field-by-field reference ........ README.md
-Per-agent nuances + credit tips ...... HELP.md
+Per-agent nuances + credit tips + ... HELP.md
+  Apify token setup for discovery
 Idea-saturation filter for content ... SKILL.md
+  (also applies to discovery batches - find the pattern, don't
+  clone all 5 reels verbatim)
 
 
 6. READ-ONLY, ALWAYS

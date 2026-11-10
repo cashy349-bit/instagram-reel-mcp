@@ -94,6 +94,29 @@ If Instagram is asking for a login session, set the `IG_REEL_COOKIES`
 env var in that client's MCP server config (`"env": {"IG_REEL_COOKIES": "/path/to/cookies.txt"}`)
 rather than editing `server.py`.
 
+## `discover_trending_by_hashtag` — extra setup (optional)
+
+This tool doesn't use yt-dlp. It calls a third-party Apify Actor over
+HTTPS, so it needs its own credential:
+
+1. Create a free Apify account at apify.com (no card required, $5/month
+   free credit).
+2. Apify Console -> Settings -> API & Integrations -> copy your API token.
+3. Set it in your AI agent's MCP server config, same place as
+   `IG_REEL_COOKIES`:
+   `"env": { "APIFY_API_TOKEN": "apify_api_xxxxxxxx" }`
+
+Honest status: the actor ID and field names in `server.py` are from
+Apify's published docs as of November 2026. This repo's build
+environment has no network path to apify.com, so this specific tool
+has not been run against the live API from here. Run it once yourself
+with a cheap `limit=3` before trusting it in a workflow, and recheck if
+Apify or the actor's maintainer changes something.
+
+If you'd rather not depend on a paid third party at all: skip this
+tool. `fetch_instagram_reel` and `fetch_reel_transcript` need nothing
+but yt-dlp and work exactly as documented.
+
 ## Using less credit / fewer tokens per call
 
 There are three tools — pick the cheapest one that actually answers the
